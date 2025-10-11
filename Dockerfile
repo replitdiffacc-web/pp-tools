@@ -1,48 +1,42 @@
 # Stage 1: Build frontend with Node.js
 FROM node:20-alpine AS frontend-builder
-
 WORKDIR /app/frontend
-
 COPY package*.json ./
 RUN npm ci
-
 COPY vite.config.js ./
 COPY tailwind.config.js ./
 COPY postcss.config.js ./
 COPY index.html ./
 COPY src ./src
-
 RUN npm run build
 
 # Stage 2: Python runtime with backend and built frontend
 FROM python:3.11-slim
-
 ENV PYTHONUNBUFFERED=1 \
     PORT=5000 \
     PYTHONDONTWRITEBYTECODE=1
-
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+# NOTE: libgl1-mesa-glx is deprecated; use libgl1. Add --no-install-recommends to keep image smaller.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
     poppler-utils \
     ffmpeg \
     libzbar0 \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libreoffice \
     libreoffice-writer \
     libreoffice-calc \
     libreoffice-impress \
-    && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend.py ./
 COPY utils ./utils
-
 COPY --from=frontend-builder /app/frontend/dist ./dist
 
 EXPOSE ${PORT}
