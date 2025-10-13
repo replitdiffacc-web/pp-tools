@@ -22,7 +22,7 @@ from utils.spreadsheet_utils import convert_spreadsheet
 from utils.vector_utils import convert_vector
 from utils.font_utils import convert_font
 from utils.cad_utils import convert_cad
-import yt_dlp 
+import yt_dlp # Import yt_dlp
 
 app = Flask(__name__, static_folder='dist', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -1267,14 +1267,17 @@ def youtube_download():
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
+                    'player_client': ['mweb', 'android', 'web'],
                     'skip': ['dash', 'hls']
                 }
-            }
+            },
+            'sleep_interval': 2,
+            'max_sleep_interval': 5
         }
         # Add cookies if the file exists
         if os.path.exists(cookies_path):
             ydl_opts['cookiefile'] = cookies_path
+            print(f"Using cookies from: {cookies_path}")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
