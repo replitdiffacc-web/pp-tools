@@ -22,7 +22,7 @@ from utils.spreadsheet_utils import convert_spreadsheet
 from utils.vector_utils import convert_vector
 from utils.font_utils import convert_font
 from utils.cad_utils import convert_cad
-import yt_dlp # Import yt_dlp
+import yt_dlp 
 
 app = Flask(__name__, static_folder='dist', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -1250,6 +1250,9 @@ def youtube_download():
             elif task_id and d['status'] == 'finished':
                 download_progress[task_id] = {'progress': 95, 'status': 'processing', 'message': 'Processing...'}
 
+        # Look for cookies file in public folder
+        cookies_path = os.path.join(os.path.dirname(__file__), 'public', 'youtube_cookies.txt')
+
         ydl_opts = {
             'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best',
             'outtmpl': output_path,
@@ -1269,6 +1272,9 @@ def youtube_download():
                 }
             }
         }
+        # Add cookies if the file exists
+        if os.path.exists(cookies_path):
+            ydl_opts['cookiefile'] = cookies_path
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
