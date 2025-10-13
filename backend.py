@@ -8,7 +8,6 @@ import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
-import yt_dlp
 from utils.image_utils import convert_image, images_to_pdf as imgs_to_pdf
 from utils.pdf_utils import pdf_to_images, merge_pdfs
 from utils.office_utils import office_to_pdf
@@ -23,6 +22,7 @@ from utils.spreadsheet_utils import convert_spreadsheet
 from utils.vector_utils import convert_vector
 from utils.font_utils import convert_font
 from utils.cad_utils import convert_cad
+import yt_dlp # Import yt_dlp
 
 app = Flask(__name__, static_folder='dist', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -1176,16 +1176,16 @@ def optimize_file(tool):
 
         # Simple compression using Pillow for images
         from PIL import Image
-        
+
         if tool == 'compress-pdf':
             # For PDF, we'll use basic optimization
             import PyPDF2
             reader = PyPDF2.PdfReader(temp_input)
             writer = PyPDF2.PdfWriter()
-            
+
             for page in reader.pages:
                 writer.add_page(page)
-            
+
             output_path = os.path.join(TMP, f'compressed_{uuid.uuid4()}.pdf')
             with open(output_path, 'wb') as output_file:
                 writer.write(output_file)
@@ -1193,7 +1193,7 @@ def optimize_file(tool):
             # For images
             img = Image.open(temp_input)
             output_path = os.path.join(TMP, f'compressed_{uuid.uuid4()}.{tool.split("-")[1]}')
-            
+
             if tool == 'compress-png':
                 img.save(output_path, 'PNG', optimize=True, compress_level=9)
             elif tool in ['compress-jpg', 'compress-jpeg']:
@@ -1261,18 +1261,14 @@ def youtube_download():
             'progress_hooks': [progress_hook] if task_id else [],
             'quiet': True,
             'no_warnings': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'skip': ['dash', 'hls']
+                }
+            }
         }
-
-        if format_type == 'mp3':
-            ydl_opts.update({
-                'format': 'bestaudio[ext=m4a]/bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-                'merge_output_format': 'mp3',
-            })
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -1296,7 +1292,7 @@ def youtube_download():
                     final_path = potential_path
                     actual_file_found = True
                     break
-            
+
             if not actual_file_found:
                  # Fallback if the exact extension wasn't found but download should be complete
                  if os.path.exists(output_path):
@@ -1313,7 +1309,7 @@ def youtube_download():
                 download_name=filename,
                 mimetype='video/mp4' if format_type == 'mp4' else 'audio/mpeg'
             )
-            
+
             response.headers['X-Task-ID'] = task_id # Add task_id to response headers for client-side tracking
 
             @response.call_on_close
