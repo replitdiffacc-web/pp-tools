@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import toast from 'react-hot-toast'
 import { CameraIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline'
 import CustomDropdown from './CustomDropdown'
 import FileUpload from './FileUpload';
@@ -42,18 +43,37 @@ export default function CaptureTools() {
     setProgress(0)
     setDownloadUrl(null)
 
-    const progressInterval = setInterval(() => {
-      setProgress(prev => Math.min(prev + 10, 90))
-    }, 300)
+    const taskId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    let eventSource = null
 
     try {
+      // Start listening to progress updates
+      eventSource = new EventSource(`${API_URL}/progress/${taskId}`)
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.progress !== undefined) {
+            setProgress(data.progress)
+          }
+          if (data.status === 'complete' || data.status === 'error') {
+            eventSource?.close()
+          }
+        } catch (e) {
+          console.error('Error parsing progress:', e)
+        }
+      }
+
+      eventSource.onerror = () => {
+        eventSource?.close()
+      }
+
       const response = await axios.post(
         `${API_URL}/capture/${tool}`,
-        { url },
+        { url, task_id: taskId },
         { responseType: 'blob' }
       )
 
-      clearInterval(progressInterval)
       setProgress(100)
 
       const blobUrl = window.URL.createObjectURL(new Blob([response.data]))
@@ -66,10 +86,13 @@ export default function CaptureTools() {
       document.body.appendChild(link)
       link.click()
       link.remove()
+
+      toast.success('Website captured successfully!')
     } catch (error) {
-      clearInterval(progressInterval)
-      alert('Error capturing website: ' + error.message)
+      eventSource?.close()
+      toast.error('Error capturing website: ' + error.message)
     } finally {
+      eventSource?.close()
       setLoading(false)
     }
   }
@@ -84,25 +107,39 @@ export default function CaptureTools() {
     setProgress(0);
     setDownloadUrl(null);
 
+    const taskId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    let eventSource = null
+
     const formData = new FormData();
     pdfFiles.forEach(file => formData.append('files', file));
-
-    const progressInterval = setInterval(() => {
-      setProgress(prev => Math.min(prev + 10, 90));
-    }, 300);
+    formData.append('task_id', taskId);
 
     try {
-      const response = await axios.post(`${API_URL}/merge-pdf`, formData, {
-        responseType: 'blob',
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.lengthComputable) {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setProgress(percentCompleted);
+      // Start listening to progress updates
+      eventSource = new EventSource(`${API_URL}/progress/${taskId}`)
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.progress !== undefined) {
+            setProgress(data.progress)
           }
-        },
+          if (data.status === 'complete' || data.status === 'error') {
+            eventSource?.close()
+          }
+        } catch (e) {
+          console.error('Error parsing progress:', e)
+        }
+      }
+
+      eventSource.onerror = () => {
+        eventSource?.close()
+      }
+
+      const response = await axios.post(`${API_URL}/pdf/merge`, formData, {
+        responseType: 'blob'
       });
 
-      clearInterval(progressInterval);
       setProgress(100);
 
       const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
@@ -115,10 +152,12 @@ export default function CaptureTools() {
       link.click();
       link.remove();
 
+      toast.success('PDFs merged successfully!');
     } catch (error) {
-      clearInterval(progressInterval);
-      alert('Error merging PDFs: ' + error.message);
+      eventSource?.close()
+      toast.error('Error merging PDFs: ' + error.message);
     } finally {
+      eventSource?.close()
       setLoading(false);
     }
   };

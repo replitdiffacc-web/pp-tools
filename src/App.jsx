@@ -1,11 +1,15 @@
 import { Tab } from '@headlessui/react'
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import { Toaster } from 'react-hot-toast'
 import UniversalConverter from './components/UniversalConverter'
 import OptimizeTools from './components/OptimizeTools'
 import MergeTools from './components/MergeTools'
 import CaptureTools from './components/CaptureTools'
 import QRTools from './components/QRTools'
+import ImageTools from './components/ImageTools'
+import CitationGenerator from './components/CitationGenerator'
+import YouTubeDownloader from './components/YouTubeDownloader'
 import AuthModal from './components/AuthModal'
 import DownloadHistory from './components/DownloadHistory'
 import {
@@ -14,9 +18,12 @@ import {
   DocumentPlusIcon,
   CameraIcon,
   QrCodeIcon,
+  PhotoIcon,
+  BookOpenIcon,
   UserCircleIcon,
   ClockIcon,
   ArrowRightOnRectangleIcon,
+  PlayIcon,
 } from '@heroicons/react/24/outline'
 
 const API_URL = '/api'
@@ -54,6 +61,9 @@ function App() {
 
   const tabs = [
     { name: 'Convert Files', icon: ArrowPathIcon, component: UniversalConverter },
+    { name: 'YouTube Downloader', icon: PlayIcon, component: YouTubeDownloader },
+    { name: 'Image Tools', icon: PhotoIcon, component: ImageTools },
+    { name: 'Citation Generator', icon: BookOpenIcon, component: CitationGenerator },
     { name: 'Optimize & OCR', icon: SparklesIcon, component: OptimizeTools },
     { name: 'Merge PDFs', icon: DocumentPlusIcon, component: MergeTools },
     { name: 'Capture Website', icon: CameraIcon, component: CaptureTools },
@@ -62,6 +72,7 @@ function App() {
 
   return (
     <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8">
+      <Toaster position="top-right" />
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -75,9 +86,9 @@ function App() {
         <div className="flex items-center justify-between mb-8">
           <div className="text-center flex-1">
             <h1 className="text-5xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent mb-3">
-              Universal File Converter
+              Universal Tool Suite
             </h1>
-            <p className="text-gray-600 text-lg">Convert between 200+ file formats instantly</p>
+            <p className="text-gray-600 text-lg">File conversion, citations, YouTube downloads & more</p>
           </div>
           <div className="flex items-center gap-2">
             {user ? (
@@ -150,6 +161,9 @@ function App() {
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-500">
             Supports Archive • Audio • CAD • Documents • Ebooks • Fonts • Images • Presentations • Spreadsheets • Vectors • Videos • QR Codes
+          </p>
+          <p className="text-sm text-gray-400 mt-2">
+            Created by <a href="https://anshgupta.site" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-700 underline">Ansh Gupta</a> and Raghav Gupta
           </p>
         </div>
       </div>

@@ -33,9 +33,9 @@ export default function CustomDropdown({ value, onChange, options, label, classN
             leaveTo="opacity-0"
             afterLeave={() => setSearchQuery('')}
           >
-            <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none overflow-hidden">
+            <Listbox.Options className="absolute z-50 mt-1 max-h-60 w-full rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none overflow-hidden">
               {searchable && (
-                <div className="sticky top-0 bg-white border-b border-gray-200 p-2">
+                <div className="sticky top-0 bg-white border-b border-gray-200 p-2 z-10">
                   <div className="relative">
                     <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
@@ -49,7 +49,7 @@ export default function CustomDropdown({ value, onChange, options, label, classN
                   </div>
                 </div>
               )}
-              <div className="py-1 overflow-auto max-h-52">
+              <div className="py-1 overflow-y-auto max-h-52">
                 {filteredOptions.length === 0 ? (
                   <div className="py-2 px-4 text-sm text-gray-500 text-center">No results found</div>
                 ) : (

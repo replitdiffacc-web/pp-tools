@@ -1,10 +1,26 @@
+
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import toast from 'react-hot-toast'
 import { ArrowDownTrayIcon, ClipboardDocumentIcon, CheckIcon } from '@heroicons/react/24/outline'
 import FileUpload from './FileUpload'
 import CustomDropdown from './CustomDropdown'
 
 const API_URL = '/api'
+
+const outputFormats = {
+  image: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tiff', 'tif', 'ico', 'ppm', 'eps', 'pdf', 'im', 'msp', 'pcx', 'sgi', 'tga', 'xbm', 'avif', 'heic', 'heif', 'icns', 'jfif', 'ps', 'psd', 'xcf', 'xps'],
+  audio: ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'ac3', 'aif', 'aifc', 'aiff', 'amr', 'au', 'caf', 'dss', 'm4b', 'oga', 'voc', 'weba', 'wma'],
+  video: ['mp4', 'webm', 'avi', 'mkv', 'mov', 'gif', '3g2', '3gp', '3gpp', 'cavs', 'dv', 'dvr', 'flv', 'm2ts', 'm4v', 'mod', 'mpeg', 'mpg', 'mts', 'mxf', 'ogg', 'rm', 'rmvb', 'swf', 'ts', 'vob', 'wmv', 'wtv'],
+  document: ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'html'],
+  archive: ['zip', 'tar', 'tar.gz', 'tgz', 'tar.bz2', 'tbz2', 'tar.xz', '7z'],
+  ebook: ['epub', 'mobi', 'azw3', 'pdf', 'txt', 'fb2', 'lit', 'lrf', 'pdb', 'pml', 'rb', 'snb', 'tcr'],
+  presentation: ['pdf', 'pptx', 'ppt', 'odp', 'key'],
+  spreadsheet: ['xlsx', 'xls', 'ods', 'csv', 'pdf'],
+  vector: ['svg', 'pdf', 'eps', 'ps', 'png', 'ai', 'emf', 'wmf'],
+  font: ['ttf', 'otf', 'woff', 'woff2', 'eot'],
+  cad: ['pdf', 'svg', 'png', 'dxf']
+}
 
 const formatCategories = {
   archive: ['7z', 'ace', 'alz', 'arc', 'arj', 'bz', 'bz2', 'cab', 'cpio', 'deb', 'dmg', 'gz', 'img', 'iso', 'jar', 'lha', 'lz', 'lzma', 'lzo', 'rar', 'rpm', 'rz', 'tar', 'tar.7z', 'tar.bz', 'tar.bz2', 'tar.gz', 'tar.lzo', 'tar.xz', 'tar.z', 'tbz', 'tbz2', 'tgz', 'tz', 'tzo', 'xz', 'z', 'zip'],
@@ -14,7 +30,6 @@ const formatCategories = {
   ebook: ['azw', 'azw3', 'azw4', 'cbc', 'cbr', 'cbz', 'chm', 'epub', 'fb2', 'htm', 'htmlz', 'lit', 'lrf', 'mobi', 'pdb', 'pml', 'prc', 'rb', 'snb', 'tcr', 'txtz'],
   font: ['eot', 'otf', 'ttf', 'woff', 'woff2'],
   image: ['3fr', 'arw', 'avif', 'bmp', 'cr2', 'cr3', 'crw', 'dcr', 'dng', 'eps', 'erf', 'gif', 'heic', 'heif', 'icns', 'ico', 'jfif', 'jpeg', 'jpg', 'mos', 'mrw', 'nef', 'odd', 'odg', 'orf', 'pef', 'png', 'ppm', 'ps', 'psd', 'pub', 'raf', 'raw', 'rw2', 'tif', 'tiff', 'webp', 'x3f', 'xcf', 'xps'],
-  'image-tools': ['invert', 'text-to-image'],
   presentation: ['dps', 'key', 'odp', 'pot', 'potx', 'pps', 'ppsx', 'ppt', 'pptm', 'pptx'],
   spreadsheet: ['csv', 'et', 'numbers', 'ods', 'xls', 'xlsm', 'xlsx'],
   vector: ['ai', 'cdr', 'cgm', 'emf', 'sk', 'sk1', 'svg', 'svgz', 'vsd', 'wmf'],
@@ -34,115 +49,111 @@ export default function UniversalConverter() {
   const [copied, setCopied] = useState(false)
   const [width, setWidth] = useState('')
   const [height, setHeight] = useState('')
-  const [textInput, setTextInput] = useState('')
-  const [fontSize, setFontSize] = useState('24')
 
   useEffect(() => {
-    setOutputFormat(formatCategories[category][0])
+    setOutputFormat(outputFormats[category]?.[0] || 'png')
   }, [category])
 
   const handleConvert = async () => {
-    if (category === 'image-tools' && outputFormat === 'text-to-image' && !textInput) {
-      alert('Please enter text to convert to image')
+    if (!file && files.length === 0) {
+      toast.error('Please select a file to convert')
       return
     }
-    if (category !== 'image-tools' && !file && files.length === 0) return
-    
+
     setLoading(true)
     setProgress(0)
     setDownloadUrl(null)
     setConvertedBlob(null)
 
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 90) {
-          clearInterval(progressInterval)
-          return 90
-        }
-        return prev + 10
-      })
-    }, 200)
+    const taskId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    let eventSource = null
 
     try {
-      let endpoint = ''
-      let response
+      // Start listening to progress updates
+      eventSource = new EventSource(`${API_URL}/progress/${taskId}`)
       
-      if (category === 'image-tools') {
-        if (outputFormat === 'invert') {
-          const formData = new FormData()
-          formData.append('file', file)
-          response = await axios.post(`${API_URL}/image/invert`, formData, {
-            responseType: 'blob'
-          })
-        } else if (outputFormat === 'text-to-image') {
-          response = await axios.post(`${API_URL}/text/to-image`, {
-            text: textInput,
-            width: width || 800,
-            height: height || 600,
-            font_size: parseInt(fontSize) || 24
-          }, {
-            responseType: 'blob'
-          })
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.progress !== undefined) {
+            setProgress(data.progress)
+          }
+          if (data.message) {
+            // Optionally show status messages
+            console.log(data.message)
+          }
+          if (data.status === 'complete' || data.status === 'error') {
+            eventSource?.close()
+          }
+        } catch (e) {
+          console.error('Error parsing progress:', e)
         }
-      } else {
-        const formData = new FormData()
-        
-        // Handle multiple files
-        if (files.length > 0) {
-          files.forEach(f => {
-            formData.append('files', f)
-          })
-        } else if (file) {
-          formData.append('file', file)
-        }
-        
-        formData.append('format', outputFormat)
-        if (width) formData.append('width', width)
-        if (height) formData.append('height', height)
-
-        if (category === 'image') {
-          endpoint = '/image/convert'
-        } else if (category === 'audio') {
-          endpoint = '/audio/convert'
-        } else if (category === 'video') {
-          endpoint = '/video/convert'
-        } else if (category === 'document') {
-          endpoint = '/office/to-pdf'
-        } else if (category === 'archive') {
-          endpoint = '/archive/extract'
-        } else {
-          endpoint = '/image/convert'
-        }
-
-        response = await axios.post(`${API_URL}${endpoint}`, formData, {
-          responseType: 'blob'
-        })
       }
-      
-      clearInterval(progressInterval)
+
+      eventSource.onerror = (error) => {
+        console.error('SSE Error:', error)
+        eventSource?.close()
+      }
+
+      let endpoint = ''
+      const formData = new FormData()
+
+      // Handle multiple files
+      if (files.length > 0) {
+        files.forEach(f => {
+          formData.append('files', f)
+        })
+      } else if (file) {
+        formData.append('file', file)
+      }
+
+      formData.append('format', outputFormat)
+      formData.append('task_id', taskId)
+      if (width) formData.append('width', width)
+      if (height) formData.append('height', height)
+
+      // Map categories to endpoints
+      const endpointMap = {
+        image: '/image/convert',
+        audio: '/audio/convert',
+        video: '/video/convert',
+        document: '/office/to-pdf',
+        archive: '/archive/extract',
+        ebook: '/ebook/convert',
+        presentation: '/presentation/convert',
+        spreadsheet: '/spreadsheet/convert',
+        vector: '/vector/convert',
+        font: '/font/convert',
+        cad: '/cad/convert'
+      }
+
+      endpoint = endpointMap[category] || '/image/convert'
+
+      const response = await axios.post(`${API_URL}${endpoint}`, formData, {
+        responseType: 'blob'
+      })
+
       setProgress(100)
-      
+
       const blob = new Blob([response.data])
       const url = window.URL.createObjectURL(blob)
       setDownloadUrl(url)
       setConvertedBlob(blob)
-      
-      if (category === 'image-tools' && outputFormat === 'text-to-image') {
-        setOutputFilename('text_image.png')
-      } else if (category === 'image-tools' && outputFormat === 'invert') {
-        const baseName = file.name.split('.').slice(0, -1).join('.')
-        setOutputFilename(`${baseName}_inverted.png`)
-      } else if (files.length > 1) {
-        setOutputFilename(`converted_images_${outputFormat}.zip`)
+
+      if (files.length > 1) {
+        setOutputFilename(`converted_${category}_${outputFormat}.zip`)
       } else {
         const fileName = file?.name || files[0]?.name
         const baseName = fileName.split('.').slice(0, -1).join('.')
         setOutputFilename(`${baseName}.${outputFormat}`)
       }
+
+      toast.success('Conversion successful!')
     } catch (error) {
-      clearInterval(progressInterval)
-      alert('Error converting file: ' + error.message)
+      const errorMsg = error.response?.data?.error || error.message || 'Error converting file'
+      toast.error(errorMsg)
     } finally {
+      eventSource?.close()
       setLoading(false)
     }
   }
@@ -158,19 +169,25 @@ export default function UniversalConverter() {
     if (saveToHistory) {
       try {
         const formData = new FormData()
-        
+
         // Handle multiple files or single file
-        const origFilename = files.length > 1 
+        const origFilename = files.length > 1
           ? files.map(f => f.name).join(', ')
           : (file?.name || files[0]?.name)
-        
+
         formData.append('original_filename', origFilename)
         formData.append('output_filename', outputFilename)
         formData.append('conversion_type', `${category}_to_${outputFormat}`)
         formData.append('file', convertedBlob, outputFilename)
-        
+
         await axios.post(`${API_URL}/history/save`, formData, { withCredentials: true })
+        toast.success('Saved to history!')
       } catch (error) {
+        if (error.response?.status === 401) {
+          toast.error('Please log in to save conversion history')
+        } else {
+          toast.error('Error saving to history')
+        }
         console.error('Error saving to history:', error)
       }
     }
@@ -193,7 +210,6 @@ export default function UniversalConverter() {
   }
 
   const getCategoryLabel = (cat) => {
-    if (cat === 'image-tools') return 'Image Tools'
     return cat.charAt(0).toUpperCase() + cat.slice(1)
   }
 
@@ -201,8 +217,8 @@ export default function UniversalConverter() {
     value: cat,
     label: getCategoryLabel(cat)
   }))
-  
-  const formatOptions = formatCategories[category].map(format => ({
+
+  const formatOptions = (outputFormats[category] || []).map(format => ({
     value: format,
     label: format.toUpperCase()
   }))
@@ -223,95 +239,46 @@ export default function UniversalConverter() {
             label="Select File Category"
           />
 
-          {category === 'image-tools' && outputFormat === 'text-to-image' ? (
-            <>
+          <FileUpload
+            onFileSelect={(selected) => {
+              if (Array.isArray(selected)) {
+                setFiles(selected)
+                setFile(null)
+              } else {
+                setFile(selected)
+                setFiles([])
+              }
+            }}
+            file={file}
+            files={files}
+            multiple={true}
+            label={files.length > 0 ? `Choose Files (${files.length} selected)` : "Choose Files"}
+            allowPaste={category === 'image'}
+          />
+
+          {category === 'image' && (
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Enter Text</label>
-                <textarea
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  placeholder="Type your text here..."
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-                  rows="6"
+                <label className="block text-sm font-medium text-gray-700 mb-2">Width (optional)</label>
+                <input
+                  type="number"
+                  value={width}
+                  onChange={(e) => setWidth(e.target.value)}
+                  placeholder="Auto"
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Width</label>
-                  <input
-                    type="number"
-                    value={width}
-                    onChange={(e) => setWidth(e.target.value)}
-                    placeholder="800"
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Height</label>
-                  <input
-                    type="number"
-                    value={height}
-                    onChange={(e) => setHeight(e.target.value)}
-                    placeholder="600"
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Font Size</label>
-                  <input
-                    type="number"
-                    value={fontSize}
-                    onChange={(e) => setFontSize(e.target.value)}
-                    placeholder="24"
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Height (optional)</label>
+                <input
+                  type="number"
+                  value={height}
+                  onChange={(e) => setHeight(e.target.value)}
+                  placeholder="Auto"
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
               </div>
-            </>
-          ) : (
-            <>
-              <FileUpload
-                onFileSelect={(selected) => {
-                  if (Array.isArray(selected)) {
-                    setFiles(selected)
-                    setFile(null)
-                  } else {
-                    setFile(selected)
-                    setFiles([])
-                  }
-                }}
-                file={file}
-                files={files}
-                multiple={true}
-                label={files.length > 0 ? `Choose Files (${files.length} selected)` : "Choose Files"}
-                allowPaste={category === 'image' || category === 'image-tools'}
-              />
-
-              {(category === 'image' || (category === 'image-tools' && outputFormat === 'invert')) && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Width (optional)</label>
-                    <input
-                      type="number"
-                      value={width}
-                      onChange={(e) => setWidth(e.target.value)}
-                      placeholder="Auto"
-                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Height (optional)</label>
-                    <input
-                      type="number"
-                      value={height}
-                      onChange={(e) => setHeight(e.target.value)}
-                      placeholder="Auto"
-                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-              )}
-            </>
+            </div>
           )}
         </div>
 
@@ -324,19 +291,31 @@ export default function UniversalConverter() {
             searchable={true}
           />
 
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Supported Formats ({formatCategories[category].length})</h4>
-            <div className="flex flex-wrap gap-1">
-              {formatCategories[category].slice(0, 20).map(format => (
-                <span key={format} className="text-xs px-2 py-1 bg-white rounded border border-gray-200 text-gray-600">
-                  {format.toUpperCase()}
-                </span>
-              ))}
-              {formatCategories[category].length > 20 && (
-                <span className="text-xs px-2 py-1 text-gray-500">
-                  +{formatCategories[category].length - 20} more
-                </span>
-              )}
+          <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Input Formats ({formatCategories[category].length})</h4>
+              <div className="flex flex-wrap gap-1">
+                {formatCategories[category].slice(0, 15).map(format => (
+                  <span key={format} className="text-xs px-2 py-1 bg-white rounded border border-gray-200 text-gray-600">
+                    {format.toUpperCase()}
+                  </span>
+                ))}
+                {formatCategories[category].length > 15 && (
+                  <span className="text-xs px-2 py-1 text-gray-500">
+                    +{formatCategories[category].length - 15} more
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Output Formats ({(outputFormats[category] || []).length})</h4>
+              <div className="flex flex-wrap gap-1">
+                {(outputFormats[category] || []).map(format => (
+                  <span key={format} className="text-xs px-2 py-1 bg-green-50 rounded border border-green-200 text-green-700">
+                    {format.toUpperCase()}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </div>

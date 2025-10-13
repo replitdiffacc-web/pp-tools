@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import toast from 'react-hot-toast'
 import { SparklesIcon, InformationCircleIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import FileUpload from './FileUpload'
 import CustomDropdown from './CustomDropdown'
@@ -66,17 +67,38 @@ export default function OptimizeTools() {
     setLoading(true)
     setProgress(0)
 
-    const progressInterval = setInterval(() => {
-      setProgress(prev => Math.min(prev + 10, 90))
-    }, 200)
+    const taskId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    let eventSource = null
 
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('task_id', taskId)
     if (tool.includes('ocr')) {
       formData.append('lang', lang)
     }
 
     try {
+      // Start listening to progress updates
+      eventSource = new EventSource(`${API_URL}/progress/${taskId}`)
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.progress !== undefined) {
+            setProgress(data.progress)
+          }
+          if (data.status === 'complete' || data.status === 'error') {
+            eventSource?.close()
+          }
+        } catch (e) {
+          console.error('Error parsing progress:', e)
+        }
+      }
+
+      eventSource.onerror = () => {
+        eventSource?.close()
+      }
+
       let endpoint = ''
       if (tool.includes('ocr')) {
         endpoint = tool.includes('pdf') ? '/ocr/pdf' : '/ocr/image'
@@ -88,7 +110,6 @@ export default function OptimizeTools() {
         responseType: tool.includes('ocr') ? 'json' : 'blob'
       })
 
-      clearInterval(progressInterval)
       setProgress(100)
 
       if (tool.includes('ocr')) {
@@ -104,12 +125,13 @@ export default function OptimizeTools() {
         setDownloadUrl(window.URL.createObjectURL(new Blob([response.data])))
       }
     } catch (error) {
-      clearInterval(progressInterval)
-      alert('Error processing file: ' + error.message)
+      eventSource?.close()
+      toast.error('Error processing file: ' + error.message)
       setDownloadUrl(null)
       setConvertedBlob(null)
       setOutputFilename('')
     } finally {
+      eventSource?.close()
       setLoading(false)
     }
   }

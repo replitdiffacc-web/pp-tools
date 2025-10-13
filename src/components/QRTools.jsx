@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import toast from 'react-hot-toast'
 import { QrCodeIcon, ArrowDownTrayIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import FileUpload from './FileUpload'
 
@@ -15,7 +16,7 @@ export default function QRTools() {
 
   const handleGenerate = async () => {
     if (!qrData) {
-      alert('Please enter a URL')
+      toast.error('Please enter a URL')
       return
     }
 
@@ -26,17 +27,37 @@ export default function QRTools() {
         throw new Error('Invalid URL')
       }
     } catch (error) {
-      alert('Please enter a valid website URL (e.g., https://example.com)')
+      toast.error('Please enter a valid website URL (e.g., https://example.com)')
       return
     }
 
     setLoading(true)
     setQrImage(null)
 
+    const taskId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    let eventSource = null
+
     try {
+      eventSource = new EventSource(`${API_URL}/progress/${taskId}`)
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.status === 'complete' || data.status === 'error') {
+            eventSource?.close()
+          }
+        } catch (e) {
+          console.error('Error parsing progress:', e)
+        }
+      }
+
+      eventSource.onerror = () => {
+        eventSource?.close()
+      }
+
       const response = await axios.post(
         `${API_URL}/qr/generate`,
-        { data: qrData },
+        { data: qrData, task_id: taskId },
         { responseType: 'blob' }
       )
 
@@ -49,31 +70,61 @@ export default function QRTools() {
       document.body.appendChild(link)
       link.click()
       link.remove()
+      
+      toast.success('QR code generated successfully!')
+      eventSource?.close()
     } catch (error) {
-      alert('Error generating QR code: ' + error.message)
+      eventSource?.close()
+      toast.error('Error generating QR code: ' + error.message)
     } finally {
+      eventSource?.close()
       setLoading(false)
     }
   }
 
   const handleDecode = async () => {
     if (!file) {
-      alert('Please select an image file')
+      toast.error('Please select an image file')
       return
     }
 
     setLoading(true)
     setDecodedData(null)
 
+    const taskId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    let eventSource = null
+
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('task_id', taskId)
 
     try {
+      eventSource = new EventSource(`${API_URL}/progress/${taskId}`)
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.status === 'complete' || data.status === 'error') {
+            eventSource?.close()
+          }
+        } catch (e) {
+          console.error('Error parsing progress:', e)
+        }
+      }
+
+      eventSource.onerror = () => {
+        eventSource?.close()
+      }
+
       const response = await axios.post(`${API_URL}/qr/decode`, formData)
       setDecodedData(response.data)
+      toast.success('QR/Barcode decoded successfully!')
+      eventSource?.close()
     } catch (error) {
-      alert('Error decoding: ' + error.message)
+      eventSource?.close()
+      toast.error('Error decoding: ' + error.message)
     } finally {
+      eventSource?.close()
       setLoading(false)
     }
   }

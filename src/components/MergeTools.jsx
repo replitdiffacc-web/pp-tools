@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import toast from 'react-hot-toast'
 import { PlusIcon, XMarkIcon, Bars3Icon } from '@heroicons/react/24/outline'
 import FileUpload from './FileUpload'
 
@@ -48,19 +49,39 @@ export default function MergeTools() {
     setLoading(true)
     setProgress(0)
 
-    const progressInterval = setInterval(() => {
-      setProgress(prev => Math.min(prev + 10, 90))
-    }, 200)
+    const taskId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    let eventSource = null
 
     const formData = new FormData()
     files.forEach(file => formData.append('files', file))
+    formData.append('task_id', taskId)
 
     try {
+      // Start listening to progress updates
+      eventSource = new EventSource(`${API_URL}/progress/${taskId}`)
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.progress !== undefined) {
+            setProgress(data.progress)
+          }
+          if (data.status === 'complete' || data.status === 'error') {
+            eventSource?.close()
+          }
+        } catch (e) {
+          console.error('Error parsing progress:', e)
+        }
+      }
+
+      eventSource.onerror = () => {
+        eventSource?.close()
+      }
+
       const response = await axios.post(`${API_URL}/pdf/merge`, formData, {
         responseType: 'blob'
       })
 
-      clearInterval(progressInterval)
       setProgress(100)
 
       const url = window.URL.createObjectURL(new Blob([response.data]))
@@ -70,10 +91,13 @@ export default function MergeTools() {
       document.body.appendChild(link)
       link.click()
       link.remove()
+
+      toast.success('PDFs merged successfully!')
     } catch (error) {
-      clearInterval(progressInterval)
-      alert('Error merging PDFs: ' + error.message)
+      eventSource?.close()
+      toast.error('Error merging PDFs: ' + error.message)
     } finally {
+      eventSource?.close()
       setLoading(false)
     }
   }
