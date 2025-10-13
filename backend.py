@@ -8,6 +8,7 @@ import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
+import yt_dlp
 from utils.image_utils import convert_image, images_to_pdf as imgs_to_pdf
 from utils.pdf_utils import pdf_to_images, merge_pdfs
 from utils.office_utils import office_to_pdf
