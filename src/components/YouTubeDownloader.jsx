@@ -54,11 +54,13 @@ export default function YouTubeDownloader() {
         eventSource?.close()
       }
 
-      const response = await axios.post(`${API_URL}/youtube/download`, {
+      const payload = {
         url,
         format,
         task_id: taskId
-      }, {
+      }
+
+      const response = await axios.post(`${API_URL}/youtube/download`, payload, {
         responseType: 'blob'
       })
 
@@ -86,7 +88,10 @@ export default function YouTubeDownloader() {
 
       toast.success('Download complete!')
     } catch (error) {
-      const errorMsg = error.response?.data?.error || error.message || 'Error downloading video'
+      let errorMsg = error.response?.data?.error || error.message || 'Error downloading video'
+      if (/sign in to confirm/i.test(errorMsg) || /please sign in/i.test(errorMsg)) {
+        errorMsg = "YouTube asked for verification. Try again in a moment or with a different video."
+      }
       toast.error(errorMsg)
     } finally {
       eventSource?.close()
@@ -146,6 +151,11 @@ export default function YouTubeDownloader() {
               MP4 (Video)
             </button>
           </div>
+        </div>
+
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
+          We automatically retry the download using multiple YouTube client profiles to dodge the
+          "confirm you&apos;re not a bot" prompt—no cookies required.
         </div>
 
         {loading && (

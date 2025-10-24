@@ -1256,7 +1256,7 @@ def optimize_file(tool):
 
 @app.route('/api/youtube/download', methods=['POST'])
 def youtube_download():
-    data = request.json
+    data = request.json or {}
     url = data.get('url')
     format_type = data.get('format', 'mp4')
     task_id = data.get('task_id')
@@ -1282,10 +1282,7 @@ def youtube_download():
             elif task_id and d['status'] == 'finished':
                 download_progress[task_id] = {'progress': 95, 'status': 'processing', 'message': 'Processing...'}
 
-        # Look for cookies file in public folder
-        cookies_path = os.path.join(os.path.dirname(__file__), 'public', 'youtube_cookies.txt')
-
-        ydl_opts = {
+        base_opts = {
             'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best',
             'outtmpl': output_path,
             'merge_output_format': 'mp4',
@@ -1296,78 +1293,125 @@ def youtube_download():
             'progress_hooks': [progress_hook] if task_id else [],
             'quiet': True,
             'no_warnings': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['mweb', 'android', 'web'],
-                    'skip': ['dash', 'hls']
-                }
-            },
             'sleep_interval': 2,
             'max_sleep_interval': 5
         }
-        # Add cookies if the file exists
-        if os.path.exists(cookies_path):
-            ydl_opts['cookiefile'] = cookies_path
-            print(f"Using cookies from: {cookies_path}")
+        client_profiles = [
+            {
+                'http_headers': {
+                    'User-Agent': 'com.google.android.youtube/18.17.36 (Linux; U; Android 13; en_US) gzip',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'X-YouTube-Client-Name': '3',
+                    'X-YouTube-Client-Version': '18.17.36',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],
+                        'skip': ['dash', 'configs']
+                    }
+                }
+            },
+            {
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['web']
+                    }
+                }
+            },
+            {
+                'http_headers': {
+                    'User-Agent': 'YouTube/18.15.1 CFNetwork/1240.0.4 Darwin/20.6.0',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'X-YouTube-Client-Name': '5',
+                    'X-YouTube-Client-Version': '18.15.1',
+                },
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['ios'],
+                        'skip': ['dash', 'configs']
+                    }
+                }
+            }
+        ]
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            title = info.get('title', 'download')
+        info = None
+        last_error = None
 
-            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
-            safe_title = safe_title[:50] if len(safe_title) > 50 else safe_title
-
-            if format_type == 'mp3':
-                filename = f"{safe_title}.mp3"
-                final_path = output_path + '.mp3'
-            else:
-                filename = f"{safe_title}.mp4"
-                final_path = output_path + '.mp4'
-
-            # Try to find the actual downloaded file
-            actual_file_found = False
-            for ext in ['.mp4', '.mkv', '.webm', '.mp3', '.m4a']:  # Add common video/audio extensions
-                potential_path = f"{output_path}{ext}"
-                if os.path.exists(potential_path):
-                    final_path = potential_path
-                    actual_file_found = True
+        for profile in client_profiles:
+            try:
+                ydl_opts = {**base_opts, 'http_headers': profile['http_headers'], 'extractor_args': profile['extractor_args']}
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                break
+            except yt_dlp.utils.DownloadError as profile_error:
+                last_error = profile_error
+                error_message = str(profile_error).lower()
+                if 'sign in to confirm you' not in error_message and 'please sign in' not in error_message:
                     break
 
-            if not actual_file_found:
-                # Fallback if the exact extension wasn't found but download should be complete
-                if os.path.exists(output_path):
-                    final_path = output_path
-                else:
-                    raise Exception("Output file not found after download.")
+        if info is None and last_error:
+            raise last_error
 
+        title = info.get('title', 'download')
+
+        safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+        safe_title = safe_title[:50] if len(safe_title) > 50 else safe_title
+
+        if format_type == 'mp3':
+            filename = f"{safe_title}.mp3"
+            final_path = output_path + '.mp3'
+        else:
+            filename = f"{safe_title}.mp4"
+            final_path = output_path + '.mp4'
+
+        # Try to find the actual downloaded file
+        actual_file_found = False
+        for ext in ['.mp4', '.mkv', '.webm', '.mp3', '.m4a']:  # Add common video/audio extensions
+            potential_path = f"{output_path}{ext}"
+            if os.path.exists(potential_path):
+                final_path = potential_path
+                actual_file_found = True
+                break
+
+        if not actual_file_found:
+            # Fallback if the exact extension wasn't found but download should be complete
+            if os.path.exists(output_path):
+                final_path = output_path
+            else:
+                raise Exception("Output file not found after download.")
+
+        if task_id:
+            download_progress[task_id] = {'progress': 100, 'status': 'complete', 'message': 'Download complete'}
+
+        response = send_file(
+            final_path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='video/mp4' if format_type == 'mp4' else 'audio/mpeg'
+        )
+
+        response.headers['X-Task-ID'] = task_id  # Add task_id to response headers for client-side tracking
+
+        @response.call_on_close
+        def cleanup():
             if task_id:
-                download_progress[task_id] = {'progress': 100, 'status': 'complete', 'message': 'Download complete'}
-
-            response = send_file(
-                final_path,
-                as_attachment=True,
-                download_name=filename,
-                mimetype='video/mp4' if format_type == 'mp4' else 'audio/mpeg'
-            )
-
-            response.headers['X-Task-ID'] = task_id  # Add task_id to response headers for client-side tracking
-
-            @response.call_on_close
-            def cleanup():
                 threading.Thread(target=cleanup_progress, args=(task_id,)).start()
-                try:
-                    if os.path.exists(final_path):
-                        os.remove(final_path)
-                    # Clean up other potential temporary files
-                    for ext in ['.part', '.ytdl', '.mp4', '.mkv', '.webm', '.mp3', '.m4a']:
-                        temp_file = f"{output_path}{ext}"
-                        if os.path.exists(temp_file):
-                            os.remove(temp_file)
-                except Exception as e:
-                    print(f"Error during cleanup: {e}")
+            try:
+                if os.path.exists(final_path):
+                    os.remove(final_path)
+                # Clean up other potential temporary files
+                for ext in ['.part', '.ytdl', '.mp4', '.mkv', '.webm', '.mp3', '.m4a']:
+                    temp_file = f"{output_path}{ext}"
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+            except Exception as e:
+                print(f"Error during cleanup: {e}")
 
-            return response
+        return response
 
     except yt_dlp.utils.DownloadError as e:
         if task_id:
