@@ -441,23 +441,50 @@ def api_merge_pdfs():
 @app.route('/api/office/to-pdf', methods=['POST'])
 def api_office_convert():
     try:
-        if 'file' not in request.files:
+        uploads = []
+
+        if 'files' in request.files:
+            uploads = [f for f in request.files.getlist('files') if f.filename]
+        elif 'file' in request.files:
+            file = request.files['file']
+            if file.filename:
+                uploads = [file]
+
+        if not uploads:
             return jsonify({'error': 'No file provided'}), 400
 
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
-
-        temp_input = get_unique_filepath(file.filename)
-        file.save(temp_input)
-
-        out_dir = tempfile.mkdtemp(dir=TMP, prefix='office2pdf_')
         out_format = request.form.get('format', 'pdf').lower()
-        result = convert_office_document(temp_input, out_dir, out_format=out_format)
-        return send_file(result, as_attachment=True, download_name=os.path.basename(result))
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        out_dir = tempfile.mkdtemp(dir=TMP, prefix='office_convert_')
 
+        converted_paths = []
+        for upload in uploads:
+            temp_input = get_unique_filepath(upload.filename)
+            upload.save(temp_input)
+            try:
+                converted = convert_office_document(temp_input, out_dir, out_format=out_format)
+                converted_paths.append(converted)
+            finally:
+                try:
+                    os.remove(temp_input)
+                except OSError:
+                    pass
+
+        if not converted_paths:
+            return jsonify({'error': 'Conversion failed'}), 500
+
+        if len(converted_paths) == 1:
+            result = converted_paths[0]
+            return send_file(result, as_attachment=True, download_name=os.path.basename(result))
+
+        import zipfile
+
+        zip_filename = f'converted_document_{out_format}.zip'
+        zip_path = os.path.join(TMP, f"{uuid.uuid4()}_{zip_filename}")
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for path in converted_paths:
+                zipf.write(path, arcname=os.path.basename(path))
+
+        return send_file(zip_path, as_attachment=True, download_name=zip_filename)
 @app.route('/api/audio/convert', methods=['POST'])
 def api_convert_audio():
     try:
