@@ -10,7 +10,7 @@ from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from utils.image_utils import convert_image, images_to_pdf as imgs_to_pdf
 from utils.pdf_utils import pdf_to_images, merge_pdfs
-from utils.office_utils import office_to_pdf
+from utils.office_utils import convert_office_document
 from utils.av_utils import convert_audio, convert_video, video_to_gif
 from utils.ocr_utils import image_to_text, pdf_to_text
 from utils.barcode_utils import make_qr, decode_codes
@@ -437,22 +437,54 @@ def api_merge_pdfs():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/office/convert', methods=['POST'])
 @app.route('/api/office/to-pdf', methods=['POST'])
-def api_office_to_pdf():
+def api_office_convert():
     try:
-        if 'file' not in request.files:
+        uploads = []
+
+        if 'files' in request.files:
+            uploads = [f for f in request.files.getlist('files') if f.filename]
+        elif 'file' in request.files:
+            file = request.files['file']
+            if file.filename:
+                uploads = [file]
+
+        if not uploads:
             return jsonify({'error': 'No file provided'}), 400
 
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
+        out_format = request.form.get('format', 'pdf').lower()
+        out_dir = tempfile.mkdtemp(dir=TMP, prefix='office_convert_')
 
-        temp_input = get_unique_filepath(file.filename)
-        file.save(temp_input)
+        converted_paths = []
+        for upload in uploads:
+            temp_input = get_unique_filepath(upload.filename)
+            upload.save(temp_input)
+            try:
+                converted = convert_office_document(temp_input, out_dir, out_format=out_format)
+                converted_paths.append(converted)
+            finally:
+                try:
+                    os.remove(temp_input)
+                except OSError:
+                    pass
 
-        out_dir = tempfile.mkdtemp(dir=TMP, prefix='office2pdf_')
-        result = office_to_pdf(temp_input, out_dir)
-        return send_file(result, as_attachment=True)
+        if not converted_paths:
+            return jsonify({'error': 'Conversion failed'}), 500
+
+        if len(converted_paths) == 1:
+            result = converted_paths[0]
+            return send_file(result, as_attachment=True, download_name=os.path.basename(result))
+
+        import zipfile
+
+        zip_filename = f'converted_document_{out_format}.zip'
+        zip_path = os.path.join(TMP, f"{uuid.uuid4()}_{zip_filename}")
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for path in converted_paths:
+                zipf.write(path, arcname=os.path.basename(path))
+
+        return send_file(zip_path, as_attachment=True, download_name=zip_filename)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

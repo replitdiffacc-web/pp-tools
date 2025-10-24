@@ -117,7 +117,7 @@ export default function UniversalConverter() {
         image: '/image/convert',
         audio: '/audio/convert',
         video: '/video/convert',
-        document: '/office/to-pdf',
+        document: '/office/convert',
         archive: '/archive/extract',
         ebook: '/ebook/convert',
         presentation: '/presentation/convert',
