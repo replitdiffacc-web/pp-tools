@@ -22,7 +22,7 @@ from utils.spreadsheet_utils import convert_spreadsheet
 from utils.vector_utils import convert_vector
 from utils.font_utils import convert_font
 from utils.cad_utils import convert_cad
-import yt_dlp # Import yt_dlp
+import yt_dlp  # Import yt_dlp
 
 app = Flask(__name__, static_folder='dist', static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -485,6 +485,9 @@ def api_office_convert():
                 zipf.write(path, arcname=os.path.basename(path))
 
         return send_file(zip_path, as_attachment=True, download_name=zip_filename)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/audio/convert', methods=['POST'])
 def api_convert_audio():
     try:
@@ -1081,7 +1084,7 @@ import json
 
 # Global progress tracking
 conversion_progress = {}
-download_progress = {} # For YouTube downloads
+download_progress = {}  # For YouTube downloads
 
 def update_progress(task_id, progress, status='processing', message=''):
     """Update progress for a task"""
@@ -1324,7 +1327,7 @@ def youtube_download():
 
             # Try to find the actual downloaded file
             actual_file_found = False
-            for ext in ['.mp4', '.mkv', '.webm', '.mp3', '.m4a']: # Add common video/audio extensions
+            for ext in ['.mp4', '.mkv', '.webm', '.mp3', '.m4a']:  # Add common video/audio extensions
                 potential_path = f"{output_path}{ext}"
                 if os.path.exists(potential_path):
                     final_path = potential_path
@@ -1332,10 +1335,10 @@ def youtube_download():
                     break
 
             if not actual_file_found:
-                 # Fallback if the exact extension wasn't found but download should be complete
-                 if os.path.exists(output_path):
-                     final_path = output_path
-                 else:
+                # Fallback if the exact extension wasn't found but download should be complete
+                if os.path.exists(output_path):
+                    final_path = output_path
+                else:
                     raise Exception("Output file not found after download.")
 
             if task_id:
@@ -1348,7 +1351,7 @@ def youtube_download():
                 mimetype='video/mp4' if format_type == 'mp4' else 'audio/mpeg'
             )
 
-            response.headers['X-Task-ID'] = task_id # Add task_id to response headers for client-side tracking
+            response.headers['X-Task-ID'] = task_id  # Add task_id to response headers for client-side tracking
 
             @response.call_on_close
             def cleanup():
@@ -1358,9 +1361,9 @@ def youtube_download():
                         os.remove(final_path)
                     # Clean up other potential temporary files
                     for ext in ['.part', '.ytdl', '.mp4', '.mkv', '.webm', '.mp3', '.m4a']:
-                         temp_file = f"{output_path}{ext}"
-                         if os.path.exists(temp_file):
-                             os.remove(temp_file)
+                        temp_file = f"{output_path}{ext}"
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
                 except Exception as e:
                     print(f"Error during cleanup: {e}")
 
