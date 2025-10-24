@@ -485,9 +485,6 @@ def api_office_convert():
                 zipf.write(path, arcname=os.path.basename(path))
 
         return send_file(zip_path, as_attachment=True, download_name=zip_filename)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/api/audio/convert', methods=['POST'])
 def api_convert_audio():
     try:
