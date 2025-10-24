@@ -10,7 +10,7 @@ from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from utils.image_utils import convert_image, images_to_pdf as imgs_to_pdf
 from utils.pdf_utils import pdf_to_images, merge_pdfs
-from utils.office_utils import office_to_pdf
+from utils.office_utils import convert_office_document
 from utils.av_utils import convert_audio, convert_video, video_to_gif
 from utils.ocr_utils import image_to_text, pdf_to_text
 from utils.barcode_utils import make_qr, decode_codes
@@ -437,8 +437,9 @@ def api_merge_pdfs():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/office/convert', methods=['POST'])
 @app.route('/api/office/to-pdf', methods=['POST'])
-def api_office_to_pdf():
+def api_office_convert():
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
@@ -451,8 +452,9 @@ def api_office_to_pdf():
         file.save(temp_input)
 
         out_dir = tempfile.mkdtemp(dir=TMP, prefix='office2pdf_')
-        result = office_to_pdf(temp_input, out_dir)
-        return send_file(result, as_attachment=True)
+        out_format = request.form.get('format', 'pdf').lower()
+        result = convert_office_document(temp_input, out_dir, out_format=out_format)
+        return send_file(result, as_attachment=True, download_name=os.path.basename(result))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
